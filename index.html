@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Our little escape game</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', Courier, monospace; }
+        body { background-color: #0d1117; color: #00ff00; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+        /* Retro screen glow */
+        body::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
+        .container { text-align: center; width: 90%; max-width: 400px; padding: 20px; border: 1px solid #00ff00; border-radius: 10px; box-shadow: 0 0 15px rgba(0, 255, 0, 0.2); }
+        
+        h1 { font-size: 1.5rem; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        p { margin-bottom: 20px; font-size: 1rem; line-height: 1.5; }
+        
+        /* Bigger tap targets */
+        button { background-color: #00ff00; color: #0d1117; border: none; padding: 15px 20px; margin: 10px; font-size: 1.2rem; font-weight: bold; border-radius: 5px; cursor: pointer; width: 100%; transition: 0.2s; }
+        button:active { transform: scale(0.95); background-color: #00cc00; }
+        
+        /* Code input */
+        input { background-color: #161b22; color: #00ff00; border: 1px solid #00ff00; padding: 15px; font-size: 1.5rem; text-align: center; width: 100%; letter-spacing: 10px; margin-bottom: 20px; outline: none; }
+        
+        .hidden { display: none !important; }
+        /* Maze view */
+        .maze-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin: 20px auto; width: 250px; height: 250px; }
+        .cell { background-color: #161b22; border: 1px solid #333; display: flex; align-items: center; justify-content: center; border-radius: 3px; }
+        .wall { background-color: #ff0000; opacity: 0.5; }
+        .exit { background-color: #ffaa00; font-weight: bold; color: #000; }
+        .player-dot { background-color: #00ff00; border-radius: 50%; width: 60%; height: 60%; box-shadow: 0 0 10px #00ff00; }
+        
+        /* Movement pad */
+        .d-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 200px; margin: 20px auto; }
+        .d-pad button { margin: 0; padding: 20px; font-size: 1.5rem; }
+        .empty-space { visibility: hidden; }
+    </style>
+</head>
+<body>
+
+    <!-- ROLE SELECTION SCREEN -->
+    <div id="role-select" class="container">
+        <h1>Ready when you are</h1>
+        <p>Pick your side and we’ll start the game.</p>
+        <button onclick="setRole('player1')">I'm the guide</button>
+        <button onclick="setRole('player2')">I'm the player</button>
+    </div>
+
+    <div id="gf-stage-1" class="container hidden">
+        <h1>Stage 1: First lock</h1>
+        <p>Three quick questions. One tiny code.</p>
+        <p>Q1: What kind of dog do you want someday?</p>
+        <p>Q2: Who’s my favorite hero?</p>
+        <p>Q3: What number is our anniversary?</p>
+        <br>
+        <p><em>Hint: Count the letters in the first two answers, then use the third one to finish the code.</em></p>
+        <input type="number" id="pin-input" placeholder="0000" maxlength="4">
+        <button onclick="checkPin()">Try the code</button>
+    </div>
+
+    <div id="my-stage-1" class="container hidden">
+        <h1>Stage 1: Guide view</h1>
+        <p>Waiting for the player to enter the code...</p>
+        <br>
+        <p><em>Little cheat sheet:</em></p>
+        <p><em>Q1 (Labrador) = 8 letters.</em></p>
+        <p><em>Q2 (Superhero) = 9 letters.</em></p>
+        <p><em>Q3 (Date) = 15.</em></p>
+        <p id="status-message" style="color: #ffaa00; margin-top: 20px;">Status: Waiting...</p>
+    </div>
+
+    <div id="gf-stage-2" class="container hidden">
+        <h1>Stage 2: The blind maze</h1>
+        <p>You can’t see the whole map, so you’ll need to trust the guide and follow the route.</p>
+        
+        <div class="d-pad">
+            <div class="empty-space"></div>
+            <button onclick="movePlayer(0, -1)">↑</button>
+            <div class="empty-space"></div>
+            <button onclick="movePlayer(-1, 0)">←</button>
+            <button onclick="movePlayer(0, 1)">↓</button>
+            <button onclick="movePlayer(1, 0)">→</button>
+        </div>
+        <p id="maze-status" style="color: #ffaa00; margin-top: 20px;">Waiting for the first move...</p>
+    </div>
+
+    <div id="my-stage-2" class="container hidden">
+        <h1>Stage 2: The map</h1>
+        <p>Guide the player to the yellow exit and stay away from the red walls.</p>
+        <div class="maze-grid" id="maze-board"></div>
+    </div>
+
+    <div id="gf-stage-3" class="container hidden">
+        <h1>Stage 3: Last step</h1>
+        <p>The lock is almost open. Just finish the last calculation.</p>
+        <br>
+        <p><strong>Formula:</strong> (Σ - Δ) * Ω</p>
+        <br>
+        <input type="number" id="final-code" placeholder="000" maxlength="3">
+        <button onclick="checkFinalCode()">Run it</button>
+    </div>
+
+    <div id="my-stage-3" class="container hidden">
+        <h1>Stage 3: The core</h1>
+        <p>These are the numbers I managed to catch:</p>
+        <br>
+        <p style="font-size: 1.2rem;">Sigma (Σ) = 32</p>
+        <p style="font-size: 1.2rem;">Delta (Δ) = 14</p>
+        <p style="font-size: 1.2rem;">Omega (Ω) = 7</p>
+        <br>
+        <p id="final-status" style="color: #ffaa00; margin-top: 20px;">Status: Waiting for the last code...</p>
+    </div>
+
+    <div id="stage-4" class="container hidden">
+        <h1 style="color: #00ff00;">You did it</h1>
+        <p>That was a good one. The connection is steady now.</p>
+        <canvas id="drawing-board" width="300" height="400" style="border: 2px solid #00ff00; background: #0a0a0a; margin-top: 20px; touch-action: none; border-radius: 10px;"></canvas>
+        <br>
+        <button onclick="clearCanvas()" style="margin-top: 15px;">Clear the board</button>
+    </div>
+<script type="module">
+        // Firebase setup
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, push, onChildAdded, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAiMZMw83HyJ7N85LYYkLaSwovnIKjEBws",
+            authDomain: "projectescape-a5f6f.firebaseapp.com",
+            databaseURL: "https://projectescape-a5f6f-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "projectescape-a5f6f",
+            storageBucket: "projectescape-a5f6f.firebasestorage.app",
+            messagingSenderId: "685979741705",
+            appId: "1:685979741705:web:599691c298de48b70812d8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        const WINNING_PIN = "8915";
+
+        window.currentRole = '';
+
+        window.setRole = function(role) {
+            window.currentRole = role;
+            document.getElementById('role-select').classList.add('hidden');
+
+            if (role === 'player2') {
+                document.getElementById('gf-stage-1').classList.remove('hidden');
+            } else {
+                document.getElementById('my-stage-1').classList.remove('hidden');
+                set(ref(db, 'stage1/pinAttempt'), "");
+                set(ref(db, 'stage2/position'), { x: 0, y: 0 });
+                set(ref(db, 'stage3/finalAttempt'), "");
+                remove(ref(db, 'stage4/lines'));
+
+                onValue(ref(db, 'stage1/pinAttempt'), (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        const statusText = document.getElementById('status-message');
+                        statusText.innerText = "Status: Player entered code: " + data;
+                        statusText.style.color = (data === WINNING_PIN) ? "#00ff00" : "#ff0000";
+
+                        if (data === WINNING_PIN) {
+                            setTimeout(() => {
+                                goToStage2();
+                            }, 1500);
+                        }
+                    }
+                });
+
+                onValue(ref(db, 'stage2/position'), (snapshot) => {
+                    const pos = snapshot.val() || { x: 0, y: 0 };
+                    drawMaze(pos.x, pos.y);
+
+                    if (pos.x === 4 && pos.y === 4) {
+                        setTimeout(() => {
+                            goToStage3();
+                        }, 1500);
+                    }
+                });
+            }
+        }
+
+        window.checkPin = function() {
+            const pin = document.getElementById('pin-input').value;
+
+            if(pin.length !== 4) {
+                alert("The code needs to be four digits.");
+                return;
+            }
+
+            set(ref(db, 'stage1/pinAttempt'), pin);
+
+            if(pin === WINNING_PIN) {
+                alert("That worked. On to the next part.");
+                goToStage2();
+            } else {
+                alert("Nope. That one didn’t match.");
+            }
+        }
+
+        const WALLS = ['1,0', '1,2', '1,3', '3,1', '3,2', '3,4', '2,4'];
+        const EXIT = '4,4';
+
+        window.goToStage2 = function() {
+            document.getElementById('gf-stage-1').classList.add('hidden');
+            document.getElementById('my-stage-1').classList.add('hidden');
+            
+            if (window.currentRole === 'player2') {
+                document.getElementById('gf-stage-2').classList.remove('hidden');
+                // Reset player position at start of Stage 2
+                set(ref(db, 'stage2/position'), { x: 0, y: 0 });
+            } else {
+                document.getElementById('my-stage-2').classList.remove('hidden');
+            }
+        }
+
+        // Player movement
+        let localPos = { x: 0, y: 0 };
+        
+        window.movePlayer = function(dx, dy) {
+            if (navigator.vibrate) navigator.vibrate(50);
+            let newX = localPos.x + dx;
+            let newY = localPos.y + dy;
+            let statusEl = document.getElementById('maze-status');
+
+            // Out of bounds
+            if (newX < 0 || newX > 4 || newY < 0 || newY > 4) {
+                statusEl.innerText = "You’re at the edge. Try a different way.";
+                statusEl.style.color = "#ff0000";
+                return;
+            }
+
+            // Wall check
+            if (WALLS.includes(`${newX},${newY}`)) {
+                statusEl.innerText = "That one hit a wall. Ask the guide for another route.";
+                statusEl.style.color = "#ff0000";
+                return;
+            }
+
+            // Move is valid
+            localPos = { x: newX, y: newY };
+            set(ref(db, 'stage2/position'), localPos);
+            statusEl.innerText = `You’re now in sector [${newX}, ${newY}]`;
+            statusEl.style.color = "#00ff00";
+
+            // Check for win
+            if (newX === 4 && newY === 4) {
+                alert("You made it through. Time for the last step.");
+                goToStage3();
+            }
+        }
+
+        // Guide view map
+        function drawMaze(playerX, playerY) {
+            const board = document.getElementById('maze-board');
+            board.innerHTML = ''; // Clear old map
+
+            for (let y = 0; y < 5; y++) {
+                for (let x = 0; x < 5; x++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+
+                    if (WALLS.includes(`${x},${y}`)) {
+                        cell.classList.add('wall');
+                    } else if (x === 4 && y === 4) {
+                        cell.classList.add('exit');
+                        cell.innerText = 'E';
+                    }
+
+                    if (x === playerX && y === playerY) {
+                        const dot = document.createElement('div');
+                        dot.classList.add('player-dot');
+                        cell.appendChild(dot);
+                    }
+
+                    board.appendChild(cell);
+                }
+            }
+        }
+        const FINAL_ANSWER = "126";
+
+        window.goToStage3 = function() {
+            document.getElementById('gf-stage-2').classList.add('hidden');
+            document.getElementById('my-stage-2').classList.add('hidden');
+            
+            if (window.currentRole === 'player2') {
+                document.getElementById('gf-stage-3').classList.remove('hidden');
+            } else {
+                document.getElementById('my-stage-3').classList.remove('hidden');
+                
+                // Clear old attempts
+                set(ref(db, 'stage3/finalAttempt'), ""); 
+                
+// Listen for the final code
+                onValue(ref(db, 'stage3/finalAttempt'), (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        const statusText = document.getElementById('final-status');
+                        statusText.innerText = "Status: Code entered -> " + data;
+                        
+                        if (data === FINAL_ANSWER) {
+                            statusText.style.color = "#00ff00";
+                            setTimeout(() => {
+                                goToStage4(); 
+                            }, 500);
+                        } else {
+                            statusText.style.color = "#ff0000";
+                        }
+                    }
+                });
+            }
+        }
+
+        window.checkFinalCode = function() {
+            const code = document.getElementById('final-code').value;
+            
+            set(ref(db, 'stage3/finalAttempt'), code);
+            if(code === FINAL_ANSWER) { 
+                 goToStage4();
+            }
+        }
+        const canvas = document.getElementById('drawing-board');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        const linesRef = ref(db, 'stage4/lines');
+
+        function getMousePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            // Handle touch and mouse input
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const pos = getMousePos(e);
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const pos = getMousePos(e);
+            
+            // Save the line
+            push(linesRef, {
+                x0: lastX,
+                y0: lastY,
+                x1: pos.x,
+                y1: pos.y
+            });
+
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function stopDrawing() { isDrawing = false; }
+
+        // Mouse listeners
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        
+        // Touch listeners
+        canvas.addEventListener('touchstart', startDrawing, {passive: false});
+        canvas.addEventListener('touchmove', draw, {passive: false});
+        canvas.addEventListener('touchend', stopDrawing);
+
+        // Draw incoming lines
+        onChildAdded(linesRef, (snapshot) => {
+            const line = snapshot.val();
+            ctx.beginPath();
+            ctx.moveTo(line.x0, line.y0);
+            ctx.lineTo(line.x1, line.y1);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 4;
+            ctx.lineCap = "round";
+            ctx.stroke();
+            ctx.closePath();
+        });
+
+        // Clear the board when needed
+        onValue(linesRef, (snapshot) => {
+            if (!snapshot.exists()) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+
+        window.clearCanvas = function() {
+            remove(linesRef);
+        }
+
+        // Final screen
+        window.goToStage4 = function() {
+            document.getElementById('gf-stage-3').classList.add('hidden');
+            document.getElementById('my-stage-3').classList.add('hidden');
+            document.getElementById('stage-4').classList.remove('hidden');
+        }
+    </script>  
+</body>
+</html>
